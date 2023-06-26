@@ -13,6 +13,8 @@ module Security.Advisories.Definition
 
 import Data.Text (Text)
 import Data.Time (ZonedTime)
+import Distribution.Types.ComponentName (ComponentName)
+import Distribution.Types.PackageName (PackageName)
 import Distribution.Types.VersionRange (VersionRange)
 
 import Text.Pandoc.Definition (Pandoc)
@@ -92,3 +94,30 @@ data AffectedVersionRange = AffectedVersionRange
     affectedVersionRangeFixed :: Maybe Text
   }
   deriving stock (Show)
+
+-- @Package@ represents packages or components of the ecosystems
+-- monitored by the HSEC database.
+--
+-- The string representations are:
+--
+-- @
+-- package = [ "[" ecosystem "]" ] package-spec ; default ecosystem = "Hackage"
+-- ecosystem = "Hackage" / "GHC"
+-- package-spec = name [ ":" component ]  ; component not used for GHC
+-- component = "lib" [ ":" name ] \
+--             "exe:" name \
+--             "flib:" name \
+--             "test:" name \
+--             "bench:" name
+-- @
+--
+data Package
+  = HackagePackage PackageName (Maybe ComponentName)
+  -- ^ A ordinary Haskell package.  Absence of 'ComponentName' means
+  -- all @lib@ and @exe@ components.  It is possible to represent
+  -- @test@ and @bench@ components, though it would be unusual to
+  -- publish an advisory for such components.
+  | GHCPackage Text
+  -- ^ A component of the /Glasgow Haskell Compiler/ ecosystem, e.g.
+  -- @compiler@, @GHCi@, @RTS@
+  deriving (Show, Eq)
