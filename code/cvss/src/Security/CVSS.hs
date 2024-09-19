@@ -34,9 +34,10 @@ import Data.String (IsString)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Float (powerFloat)
-import Security.V4_0.CVSS40Lookup (lookupScore, maxComposed, maxComposedEQ3, maxSeverity, maxSeverityeq3eq6)
 import qualified Data.Map as Map
 import Data.Either (rights)
+
+import Security.V4_0.CVSS40Lookup
 
 -- | The CVSS version.
 data CVSSVersion
@@ -568,6 +569,76 @@ validateCvss40 metrics = do
 
 cvss4macroVector :: [Metric] -> [Int]
 cvss4macroVector metrics = map (\eq -> castCVSSScoreToInt $ eq metrics) [calcEq1, calcEq2, calcEq3, calcEq4, calcEq5, calcEq6]
+
+metricsToMacroVector :: [Metric] -> MacroVector
+metricsToMacroVector =
+  MacroVector
+    <$> metricsToEQ1
+    <*> metricsToEQ2
+    <*> metricsToEQ4
+    <*> metricsToEQ5
+    <*> metricsToEQ3_EQ6
+
+metricsToEQ1 :: [Metric] -> EQ1
+metricsToEQ1 metrics
+  | hasC "AV" (C 'N'), hasC "PR" (C 'N'), hasC "UI" (C 'N')
+  = EQ1_0
+  | hasC "AV" (C 'N') || hasC "PR" (C 'N') || hasC "UI" (C 'N'), not (hasC "AV" (C 'P'))
+  = EQ1_1
+  | otherwise
+  = EQ1_2
+  where
+    hasC = hasCvssMetricWithValueR metrics
+
+metricsToEQ2 :: [Metric] -> EQ2
+metricsToEQ2 metrics
+  | hasC "AC" (C 'L'), hasC "AT" (C 'N')
+  = EQ2_0
+  | otherwise
+  = EQ2_1
+  where
+    hasC = hasCvssMetricWithValueR metrics
+
+metricsToEQ4 :: [Metric] -> EQ4
+metricsToEQ4 metrics
+  | hasC "MSI" (C 'S') || hasC "MSA" (C 'S')
+  = EQ4_0
+  | hasC "SC" (C 'H') || hasC "SI" (C 'H') || hasC "SA" (C 'H')
+  = EQ4_1
+  | otherwise
+  = EQ4_2
+  where
+    hasC = hasCvssMetricWithValueR metrics
+
+metricsToEQ5 :: [Metric] -> EQ5
+metricsToEQ5 metrics
+  | hasC "E" (C 'A')
+  = EQ5_0
+  | hasC "E" (C 'P')
+  = EQ5_1
+  | otherwise -- E:U
+  = EQ5_2
+  where
+    hasC = hasCvssMetricWithValueR metrics
+
+metricsToEQ3_EQ6 :: [Metric] -> EQ3_EQ6
+metricsToEQ3_EQ6 metrics
+  | hasC "VC" (C 'H'), hasC "VI" (C 'H')
+    , hasC "CR" (C 'H') || hasC "IR" (C 'H') || (hasC "AR" (C 'H') && hasC "VA" (C 'H'))
+  = EQ3_EQ6_00
+  | hasC "VC" (C 'H'), hasC "VI" (C 'H')
+  = EQ3_EQ6_01
+  | hasC "VC" (C 'H') || hasC "VI" (C 'H') || hasC "VA" (C 'H')
+    , hasC "CR" (C 'H') && hasC "VC" (C 'H')
+      || hasC "IR" (C 'H') && hasC "VI" (C 'H')
+      || hasC "AR" (C 'H') && hasC "VA" (C 'H')
+  = EQ3_EQ6_10
+  | hasC "VC" (C 'H') || hasC "VI" (C 'H') || hasC "VA" (C 'H')
+  = EQ3_EQ6_11
+  | otherwise
+  = EQ3_EQ6_21
+  where
+    hasC = hasCvssMetricWithValueR metrics
 
 calculateEq3Eq6NextLowerMacro :: Int -> Int -> Int -> Int -> Int -> Int -> Maybe Float
 calculateEq3Eq6NextLowerMacro eq1 eq2 eq3 eq4 eq5 eq6 =
